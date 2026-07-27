@@ -9,6 +9,8 @@ import ms from 'ms';
 import { generateRandom } from '@app/contracts/utils/random/randomString';
 import DataResultDto from '@app/contracts/models/dtos/dataResultDto';
 import AccessTokenDto from '@app/contracts/models/dtos/accessToken.dto';
+import { RPCContext } from '@app/contracts/utils/crossCuttingConcerns/decorators/rpc-context.decorator';
+import { RpcException } from '@nestjs/microservices';
 
 @Injectable()
 export class UserService {
@@ -21,7 +23,13 @@ export class UserService {
     console.log(user)
 
     if (!user) {
-      throw new NotFoundException('user.get.not-found')
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'user.get.not-found',
+        },
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     if (!user.verified) {
