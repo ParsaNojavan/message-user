@@ -11,6 +11,9 @@ import DataResultDto from '@app/contracts/models/dtos/dataResultDto';
 import AccessTokenDto from '@app/contracts/models/dtos/accessToken.dto';
 import { RPCContext } from '@app/contracts/utils/crossCuttingConcerns/decorators/rpc-context.decorator';
 import { RpcException } from '@nestjs/microservices';
+import ResetPasswordDto from '@app/contracts/models/dtos/user/reset-password.dto';
+import Context from '@app/contracts/models/dtos/rpcContext';
+import ResultDto from '@app/contracts/models/dtos/resultDto';
 
 @Injectable()
 export class UserService {
@@ -253,6 +256,23 @@ export class UserService {
         refreshToken: refreshToken,
         refreshExpiration: refreshExpiration
       }
+    }
+  }
+
+  async resetPassword(resetPass: ResetPasswordDto, context: Context): Promise<ResultDto> {
+    const user = await this.userModel.findById(context.sub)
+
+    if (!user) throw new NotFoundException('user.get.not-found')
+
+    if (resetPass.password !== resetPass.confirmPassword) throw new BadRequestException('user.reset-pass.not-same')
+
+    user.passwordHash = resetPass.password
+    await user.save()
+
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'user.reset-pass.successfully'
     }
   }
 
