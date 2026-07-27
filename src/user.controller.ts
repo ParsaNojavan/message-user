@@ -3,6 +3,7 @@ import { UserService } from './user.service'
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import UserLoginRegisterDto from 'lib/contracts/src/models/dtos/user/user-login-register.dto';
 import ResultDto from 'lib/contracts/src/models/dtos/resultDto';
+import { RPCContext } from '@app/contracts/utils/crossCuttingConcerns/decorators/rpc-context.decorator';
 
 @Controller()
 export class UserController {
@@ -26,6 +27,11 @@ export class UserController {
   @MessagePattern('user.refresh-token')
   async refreshToken(@Payload() data: { refreshToken, lang?}) {
     return await this.userService.refreshToken(data);
+  }
+
+  @MessagePattern('user.reset-password')
+  async resetPassword(@Payload() data: { resetPassword }, @RPCContext() context) {
+    return await this.userService.resetPassword(data.resetPassword, context)
   }
 
 }
