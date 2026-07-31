@@ -199,30 +199,49 @@ export class UserService {
       email: userDto.email,
     }) as UserDocument;
 
-    if (!user.verified) {
-      if (!userDto.verificationCode) {
-        throw new HttpException(
-          {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'user.verify.code-required',
-          },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      if (user.verificationCode !== userDto.verificationCode) {
-        throw new HttpException(
-          {
-            statusCode: HttpStatus.FORBIDDEN,
-            message: 'user.verify.code-invalid',
-          },
-          HttpStatus.FORBIDDEN,
-        );
-      }
-
-      user.verified = true;
-      await user.save();
+    if (!user) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'user.not-found',
+        },
+        HttpStatus.NOT_FOUND,
+      );
     }
+
+    if (user.verified)
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.CONFLICT,
+          message: 'user.user.verify.already-verified',
+        },
+        HttpStatus.CONFLICT,
+      );
+
+    if (!userDto.verificationCode) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.BAD_REQUEST,
+          message: 'user.verify.code-required',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (user.verificationCode !== userDto.verificationCode) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.FORBIDDEN,
+          message: 'user.verify.code-invalid',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+
+    user.verified = true;
+    user.verificationCode = undefined;
+    await user.save();
 
     const accessToken = await this.jwtService.signAsync({
       sub: String(user._id),
