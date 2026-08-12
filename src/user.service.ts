@@ -14,6 +14,7 @@ import { RpcException } from '@nestjs/microservices';
 import ResetPasswordDto from '@app/contracts/models/dtos/user/reset-password.dto';
 import Context from '@app/contracts/models/dtos/rpcContext';
 import ResultDto from '@app/contracts/models/dtos/resultDto';
+import { first } from 'rxjs';
 
 @Injectable()
 export class UserService {
@@ -292,6 +293,26 @@ export class UserService {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'user.reset-pass.successfully'
+    }
+  }
+
+  async userProfile(context: Context): Promise<DataResultDto<any>> {
+    const user = await this.userModel.findById(context.sub);
+
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'user-profile.fetch.success',
+      data: {
+        userId: String(user?._id),
+        username: user?.username,
+        firstName: user?.firstName,
+        lastName: user?.lastName,
+        phoneNumber: user?.phoneNumber,
+        email: user?.email,
+        photoUrl: user?.photoUrl,
+        roles: user?.claims
+      }
     }
   }
 
