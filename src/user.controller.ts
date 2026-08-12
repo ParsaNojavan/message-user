@@ -4,6 +4,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import UserLoginRegisterDto from 'lib/contracts/src/models/dtos/user/user-login-register.dto';
 import ResultDto from 'lib/contracts/src/models/dtos/resultDto';
 import { RPCContext } from '@app/contracts/utils/crossCuttingConcerns/decorators/rpc-context.decorator';
+import { UpdateUserDto } from '@app/contracts/models/dtos/user/user-update.dto';
 
 @Controller()
 export class UserController {
@@ -37,6 +38,11 @@ export class UserController {
   @MessagePattern('user.profile')
   async userProfile(@RPCContext() context) {
     return await this.userService.userProfile(context)
+  }
+
+  @MessagePattern('user.update')
+  async updateProfile(@Payload() data: { userDto: UpdateUserDto }, @RPCContext() context) {
+    return await this.userService.updateProfile(data.userDto,context)
   }
 
 }
