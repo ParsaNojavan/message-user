@@ -15,6 +15,7 @@ import ResetPasswordDto from '@app/contracts/models/dtos/user/reset-password.dto
 import Context from '@app/contracts/models/dtos/rpcContext';
 import ResultDto from '@app/contracts/models/dtos/resultDto';
 import { first } from 'rxjs';
+import { UpdateUserDto } from '@app/contracts/models/dtos/user/user-update.dto';
 
 @Injectable()
 export class UserService {
@@ -314,6 +315,25 @@ export class UserService {
         roles: user?.claims
       }
     }
+  }
+
+  async updateProfile(userDto: UpdateUserDto, context: Context) {
+    const updates = Object.fromEntries(
+      Object.entries(userDto).filter(([, v]) => v !== undefined),
+    );
+
+    console.log(updates)
+
+    if (Object.keys(updates).length === 0) {
+      throw new BadRequestException('Nothing to update');
+    }
+
+
+    return this.userModel.findByIdAndUpdate(
+      context.sub,
+      { $set: updates },
+      { new: true },
+    );
   }
 
 }
