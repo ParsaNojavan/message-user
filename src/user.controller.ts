@@ -34,4 +34,9 @@ export class UserController {
     return await this.userService.resetPassword(data.resetPassword, context)
   }
 
+  @MessagePattern('user.profile')
+  async userProfile(@RPCContext() context) {
+    return await this.userService.userProfile(context)
+  }
+
 }
