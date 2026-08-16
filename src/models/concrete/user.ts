@@ -9,11 +9,11 @@ export default class User extends Document implements IEntity {
     firstName: string
     @Prop()
     lastName: string
-    @Prop()
+    @Prop({ unique: true })
     username: string
-    @Prop()
+    @Prop({ unique: true })
     phoneNumber: string
-    @Prop()
+    @Prop({ unique: true })
     email: string
     @Prop({ default: 'fa' })
     lang: string
@@ -33,6 +33,10 @@ export default class User extends Document implements IEntity {
 
     @Prop({ type: Number })
     testLimit: number
+
+    @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }] })
+    blockedUsers: string[];
+
 }
 
 export type UserDocument = User & Document & {
