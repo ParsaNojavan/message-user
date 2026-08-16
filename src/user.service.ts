@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import UserLoginRegisterDto from 'lib/contracts/src/models/dtos/user/user-login-register.dto';
 import User, { UserDocument } from './models/concrete/user';
 import { InjectModel } from '@nestjs/mongoose';
@@ -16,11 +16,13 @@ import Context from '@app/contracts/models/dtos/rpcContext';
 import ResultDto from '@app/contracts/models/dtos/resultDto';
 import { first } from 'rxjs';
 import { UpdateUserDto } from '@app/contracts/models/dtos/user/user-update.dto';
+import Redis from 'ioredis';
 
 @Injectable()
 export class UserService {
 
   constructor(@InjectModel(User.name) private userModel: Model<UserDocument>,
+    @Inject('REDIS_CLIENT') private readonly redis: Redis,
     private jwtService: JwtService) { }
 
   async login(userDto: UserLoginRegisterDto) {
@@ -334,6 +336,25 @@ export class UserService {
       { $set: updates },
       { new: true },
     );
+  }
+
+  async blockUsers(blockedId: string, context: Context) {
+    const userId = context.sub;
+
+    if (blockedId === userId) {
+      throw new BadRequestException('you can not block yourself');
+    }
+
+    const updatedUser = await this.userModel.findByIdAndUpdate(
+      new Types.ObjectId(userId),
+      { $addToSet: { blockedUsers: new Types.ObjectId(blockedId) } },
+      { new: true }
+    );
+
+    if (!updatedUser) throw new NotFoundException("user not found");
+
+    const redisKey = `user:${userId}:blocks`;
+    await this.redis.publish(redisKey, JSON.stringify(updatedUser.blockedUsers));
   }
 
 }
