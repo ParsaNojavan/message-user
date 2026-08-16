@@ -42,7 +42,12 @@ export class UserController {
 
   @MessagePattern('user.update')
   async updateProfile(@Payload() data: { userDto: UpdateUserDto }, @RPCContext() context) {
-    return await this.userService.updateProfile(data.userDto,context)
+    return await this.userService.updateProfile(data.userDto, context)
+  }
+
+  @MessagePattern('user.block')
+  async blockUsers(@Payload() data: { blockedId: string }, @RPCContext() context) {
+    return await this.userService.blockUsers(data.userIds, context);
   }
 
 }
