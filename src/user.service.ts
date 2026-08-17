@@ -338,7 +338,7 @@ export class UserService {
     );
   }
 
-  async blockUsers(blockedId: string, context: Context) {
+  async blockUser(blockedId: string, context: Context): Promise<DataResultDto<any>> {
     const userId = context.sub;
 
     if (blockedId === userId) {
@@ -348,13 +348,33 @@ export class UserService {
     const updatedUser = await this.userModel.findByIdAndUpdate(
       new Types.ObjectId(userId),
       { $addToSet: { blockedUsers: new Types.ObjectId(blockedId) } },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!updatedUser) throw new NotFoundException("user not found");
 
+
     const redisKey = `user:${userId}:blocks`;
-    await this.redis.publish(redisKey, JSON.stringify(updatedUser.blockedUsers));
+    await this.redis.set(redisKey, JSON.stringify({
+      userId: userId,
+      blocked: updatedUser.blockedUsers
+    }))
+
+    await this.redis.publish(redisKey, JSON.stringify({
+      userId: userId,
+      blocked: blockedId
+    }));
+
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'user.blocked.successfuly',
+      data: {
+        userId: userId,
+        blocked: updatedUser.blockedUsers,
+        
+      }
+    }
   }
 
 }

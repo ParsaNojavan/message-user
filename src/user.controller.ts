@@ -46,8 +46,8 @@ export class UserController {
   }
 
   @MessagePattern('user.block')
-  async blockUsers(@Payload() data: { blockedId: string }, @RPCContext() context) {
-    return await this.userService.blockUsers(data.userIds, context);
+  async blockUser(@Payload() data: { blockedId: string }, @RPCContext() context) {
+    return await this.userService.blockUser(data.blockedId, context);
   }
 
 }
