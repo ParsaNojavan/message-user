@@ -6,7 +6,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 export class ApiKeysController {
     constructor(private readonly apiKeysService: ApiKeysService) { }
 
-    @MessagePattern('create_widget_api_key')
+    @MessagePattern('api_key.create')
     async createApiKey(@Payload() payload: { userId: string, title: string, allowedDomain: string }) {
         return this.apiKeysService.generateCustomApiKey(
             payload.userId,
