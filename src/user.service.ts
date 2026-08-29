@@ -372,9 +372,47 @@ export class UserService {
       data: {
         userId: userId,
         blocked: updatedUser.blockedUsers,
-        
+
       }
     }
   }
 
+  async usersDetails(userIds: string[]): Promise<DataResultDto<any>> {
+    if (!userIds || userIds.length === 0) {
+      return {
+        success: true,
+        statusCode: HttpStatus.OK,
+        message: 'Users fetched successfully',
+        data: []
+      }
+    }
+
+    const uniqueIds = Array.from(new Set(userIds)).filter((id) =>
+      Types.ObjectId.isValid(id),
+    );
+
+    if (uniqueIds.length === 0) {
+      return {
+        success: true,
+        statusCode: HttpStatus.OK,
+        message: 'No valid user IDs provided',
+        data: []
+      }
+    }
+
+    const users = await this.userModel
+      .find({
+        _id: { $in: uniqueIds },
+      })
+      .select('_id firstName lastName username avatar isOnline lastSeen')
+      .lean()
+      .exec();
+
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Users fetched successfully',
+      data: users,
+    };
+  }
 }
