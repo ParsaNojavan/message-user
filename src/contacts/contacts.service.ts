@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import User, { UserDocument } from 'src/models/concrete/user';
-import { Model, Types } from 'mongoose';
+import { Model, PipelineStage, Types } from 'mongoose';
 import Contact, { ContactDocument } from 'src/models/concrete/contacts';
 import Context from '@app/contracts/models/dtos/rpcContext';
 import DataResultDto from '@app/contracts/models/dtos/dataResultDto';
@@ -67,7 +67,96 @@ export class ContactsService {
         }
     }
 
-    
+    async listContacts(search, cursor, limit, context: Context)
+        : Promise<DataResultDto<any>> {
+
+        limit = Math.min(limit, 50);
+        const userId = context.sub;
+        const currentUserId = new Types.ObjectId(userId);
+
+        const pipeline: PipelineStage[] = [];
+
+        const initialMatch: Record<string, any> = { userId: currentUserId };
+
+        if (cursor) {
+            initialMatch._id = { $lt: new Types.ObjectId(cursor) };
+        }
+
+        pipeline.push({ $match: initialMatch });
+
+        pipeline.push({ $sort: { _id: -1 } });
+
+        pipeline.push(
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'contactUserId',
+                    foreignField: '_id',
+                    as: 'contactUser',
+                    pipeline: [
+                        {
+                            $project: {
+                                username: 1,
+                                phoneNumber: 1,
+                                email: 1,
+                                firstName: 1,
+                                lastName: 1,
+                                avatar: 1,
+                            },
+                        },
+                    ],
+                },
+            },
+            {
+                $unwind: '$contactUser',
+            }
+        );
+
+        if (search) {
+            const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const searchRegex = new RegExp(escapedSearch, 'i');
+
+            pipeline.push({
+                $match: {
+                    $or: [
+                        { customFirstName: searchRegex },
+                        { customLastName: searchRegex },
+                        { 'contactUser.username': searchRegex },
+                        { 'contactUser.phoneNumber': searchRegex },
+                        { 'contactUser.email': searchRegex },
+                        { 'contactUser.firstName': searchRegex },
+                        { 'contactUser.lastName': searchRegex },
+                    ],
+                },
+            });
+        }
+
+        pipeline.push({ $limit: limit + 1 });
+
+        const results = await this.contactModel.aggregate(pipeline);
+
+        const hasNextPage = results.length > limit;
+        if (hasNextPage) {
+            results.pop();
+        }
+
+        const nextCursor =
+            results.length > 0 ? results[results.length - 1]._id.toString() : null;
+
+        return {
+            success: true,
+            statusCode: HttpStatus.OK,
+            message: 'contacts.fetch.success',
+            data: {
+                items: results,
+                pagination: {
+                    nextCursor,
+                    hasNextPage,
+                    limit,
+                },
+            }
+        };
+    }
 
 }
 
