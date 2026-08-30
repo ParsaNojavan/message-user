@@ -10,19 +10,21 @@ import { generateRandom } from '@app/contracts/utils/random/randomString';
 import DataResultDto from '@app/contracts/models/dtos/dataResultDto';
 import AccessTokenDto from '@app/contracts/models/dtos/accessToken.dto';
 import { RPCContext } from '@app/contracts/utils/crossCuttingConcerns/decorators/rpc-context.decorator';
-import { RpcException } from '@nestjs/microservices';
+import { ClientProxy, RpcException } from '@nestjs/microservices';
 import ResetPasswordDto from '@app/contracts/models/dtos/user/reset-password.dto';
 import Context from '@app/contracts/models/dtos/rpcContext';
 import ResultDto from '@app/contracts/models/dtos/resultDto';
 import { first } from 'rxjs';
 import { UpdateUserDto } from '@app/contracts/models/dtos/user/user-update.dto';
 import Redis from 'ioredis';
+import { OtpChannel } from '@app/contracts/models/enums/otp-type';
 
 @Injectable()
 export class UserService {
 
   constructor(@InjectModel(User.name) private userModel: Model<UserDocument>,
     @Inject('REDIS_CLIENT') private readonly redis: Redis,
+    @Inject('notification-client') private notificationClient: ClientProxy,
     private jwtService: JwtService) { }
 
   async login(userDto: UserLoginRegisterDto) {
@@ -168,7 +170,13 @@ export class UserService {
         await this.userModel.updateOne(existingUser, {
           verificationCode: verificationCode,
         });
-        console.log(verificationCode);
+
+        this.notificationClient.emit('notification.send-otp', {
+          channel: OtpChannel.EMAIL,
+          recipient: userDto.email,
+          code: verificationCode,
+        });
+
         return {
           success: true,
           statusCode: HttpStatus.OK,

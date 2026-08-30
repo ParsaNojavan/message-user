@@ -10,6 +10,7 @@ import { ApiKeysModule } from './api-keys/api-keys.module';
 import { ContactsModule } from './contacts/contacts.module';
 import Redis from 'ioredis';
 import Contact, { ContactSchema } from './models/concrete/contacts';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 
 @Module({
   imports: [
@@ -33,6 +34,16 @@ import Contact, { ContactSchema } from './models/concrete/contacts';
       },
       global: true
     }),
+    ClientsModule.register([
+      {
+        name: 'notification-client',
+        transport: Transport.REDIS,
+        options: {
+          host: process.env.REDIS_HOST ?? 'localhost',
+          port: parseInt(process.env.REDIS_PORT ?? '6379')
+        }
+      }
+    ]),
     MongooseModule.forRoot(process.env.MONGO_STRING?.toString() ?? '', { dbName: 'meesage_userdb' }),
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
