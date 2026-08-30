@@ -5,6 +5,9 @@ import { Model, PipelineStage, Types } from 'mongoose';
 import Contact, { ContactDocument } from 'src/models/concrete/contacts';
 import Context from '@app/contracts/models/dtos/rpcContext';
 import DataResultDto from '@app/contracts/models/dtos/dataResultDto';
+import { RpcException } from '@nestjs/microservices';
+import { NormalizeObjectId } from '@app/contracts/utils/mongoose/normalizeObjectId';
+import ResultDto from '@app/contracts/models/dtos/resultDto';
 
 @Injectable()
 export class ContactsService {
@@ -155,6 +158,50 @@ export class ContactsService {
                     limit,
                 },
             }
+        };
+    }
+
+    async editContact(userId: string, contactUserId: string, updateData: { customFirstName?: string; customLastName?: string })
+        : Promise<DataResultDto<any>> {
+        const updatedContact = await this.contactModel.findOneAndUpdate(
+            {
+                userId: NormalizeObjectId.getObjectIdOrString(userId),
+                contactUserId: NormalizeObjectId.getObjectIdOrString(contactUserId)
+            },
+            { $set: updateData },
+            { new: true, lean: true }
+        );
+
+        if (!updatedContact) {
+            throw new NotFoundException('contact not found');
+        }
+
+        return {
+            success: true,
+            statusCode: HttpStatus.OK,
+            message: 'contact.updated.success',
+            data: {
+                updatedContact: updatedContact
+            }
+        };
+    }
+
+    async removeContact(userId: string, contactUserId: string)
+        : Promise<ResultDto> {
+
+        const deletedContact = await this.contactModel.findOneAndDelete({
+            userId: NormalizeObjectId.getObjectIdOrString(userId),
+            contactUserId: NormalizeObjectId.getObjectIdOrString(contactUserId)
+        });
+
+        if (!deletedContact) {
+            throw new NotFoundException('contact not found');
+        }
+
+        return {
+            success: true,
+            statusCode: HttpStatus.OK,
+            message: 'contact.deleted.success',
         };
     }
 

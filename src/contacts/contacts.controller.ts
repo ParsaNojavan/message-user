@@ -36,4 +36,28 @@ export class ContactsController {
         const { search, cursor, limit = 20 } = data;
         return this.contactService.listContacts(search, cursor, limit, context);
     }
+
+    @MessagePattern('contacts.edit')
+    async handleEditContact(
+        @Payload() payload: { contactUserId: string; data: any },
+        @RPCContext() context
+    ) {
+        return this.contactService.editContact(
+            context.sub,
+            payload.contactUserId,
+            payload.data
+        );
+    }
+
+    @MessagePattern('contacts.remove')
+    async handleRemoveContact(
+        @Payload() payload: { contactUserId: string },
+        @RPCContext() context
+    ) {
+
+        return this.contactService.removeContact(
+            context.sub,
+            payload.contactUserId
+        );
+    }
 }
