@@ -7,7 +7,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import User, { UserSchema } from './models/concrete/user';
 import { ApiKeysModule } from './api-keys/api-keys.module';
+import { ContactsModule } from './contacts/contacts.module';
 import Redis from 'ioredis';
+import Contact, { ContactSchema } from './models/concrete/contacts';
 
 @Module({
   imports: [
@@ -32,8 +34,12 @@ import Redis from 'ioredis';
       global: true
     }),
     MongooseModule.forRoot(process.env.MONGO_STRING?.toString() ?? '', { dbName: 'meesage_userdb' }),
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+      { name: Contact.name, schema: ContactSchema }
+    ]),
     ApiKeysModule,
+    ContactsModule,
   ],
   controllers: [UserController],
   providers: [
