@@ -6,7 +6,7 @@ import { Model, Types } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt'
 import ms from 'ms';
-import { generateRandom } from '@app/contracts/utils/random/randomString';
+import generateRandomId, { generateRandom } from '@app/contracts/utils/random/randomString';
 import DataResultDto from '@app/contracts/models/dtos/dataResultDto';
 import AccessTokenDto from '@app/contracts/models/dtos/accessToken.dto';
 import { RPCContext } from '@app/contracts/utils/crossCuttingConcerns/decorators/rpc-context.decorator';
@@ -18,6 +18,7 @@ import { first } from 'rxjs';
 import { UpdateUserDto } from '@app/contracts/models/dtos/user/user-update.dto';
 import Redis from 'ioredis';
 import { OtpChannel } from '@app/contracts/models/enums/otp-type';
+import { formatToIranianE164 } from '@app/contracts/utils/number/phone-number';
 
 @Injectable()
 export class UserService {
@@ -27,71 +28,72 @@ export class UserService {
     @Inject('notification-client') private notificationClient: ClientProxy,
     private jwtService: JwtService) { }
 
-  async login(userDto: UserLoginRegisterDto) {
-    let user = await this.userModel.findOne({ email: userDto.email })
-    console.log(user)
+  private async getLockTTL(phoneNumber: string): Promise<number> {
+    const lockKey = `otp_lock:${phoneNumber}`;
+    return await this.redis.ttl(lockKey);
+  }
+
+  async login(userDto: UserLoginRegisterDto): Promise<ResultDto> {
+    userDto.phoneNumber = formatToIranianE164(userDto.phoneNumber);
+
+    const lockTtl = await this.getLockTTL(userDto.phoneNumber);
+    if (lockTtl > 0) {
+      const minutesRemaining = Math.ceil(lockTtl / 60);
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: 'user.login.too-many-failed-attempts',
+          retryAfterSeconds: lockTtl,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const cooldownKey = `otp_cooldown:${userDto.phoneNumber}`;
+    const cooldownTtl = await this.redis.ttl(cooldownKey);
+
+    if (cooldownTtl > 0) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: 'user.login.code-cooldown-active',
+          resendAfterSeconds: cooldownTtl,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    let user = await this.userModel.findOne({ phoneNumber: userDto.phoneNumber });
 
     if (!user) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'user.get.not-found',
-        },
-        HttpStatus.NOT_FOUND,
-      );
+      user = await this.userModel.create({
+        phoneNumber: userDto.phoneNumber,
+        verified: false,
+        passwordHash: generateRandomId(16),
+        lang: userDto.lang,
+      });
     }
 
-    if (!user.verified) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.FORBIDDEN,
-          message: 'auth.login.user-not-verified',
-        },
-        HttpStatus.FORBIDDEN,
-      );
-    }
+    await this.redis.set(cooldownKey, '1', 'EX', 120);
 
-    console.log('user found!')
+    let verificationCode: string;
 
-    if (!await bcrypt.compare(userDto.password, user.passwordHash)) {
-      throw new ForbiddenException('auth.login.password-or-username-is-invalid')
-    }
+    verificationCode = generateRandom(false, true, 4);
 
-    console.log('password correct!')
+    user.verificationCode = verificationCode;
+    await user.save();
 
-    const accessToken = await this.jwtService.signAsync({
-      sub: String(user._id),
-      claims: user.claims,
-      lang: user.lang,
-    })
-
-    const expiresInMs = ms(process.env.JWT_EXPIRATION || '1h');
-    const expiration = new Date(Date.now() + expiresInMs);
-
-    const refreshToken = await this.jwtService.signAsync({
-      sub: String(user._id),
-      claims: user.claims,
-      lang: user.lang,
-    }, {
-      secret: process.env.JWT_REFRESH_SECRET,
-      expiresIn: (process.env.JWT_REFRESH_EXPIRATION || '1d') as any
-    })
-
-    const refreshExpiresInMs = ms(process.env.JWT_REFRESH_EXPIRATION || '1d');
-    const refreshExpiration = new Date(Date.now() + refreshExpiresInMs);
+    this.notificationClient.emit('notification.send-otp', {
+      channel: OtpChannel.SMS,
+      recipient: userDto.phoneNumber,
+      code: verificationCode,
+    });
 
     return {
       success: true,
+      message: 'user.code-sent',
       statusCode: HttpStatus.OK,
-      message: 'user.verify.successfully',
-      data: {
-        type: 'Bearer',
-        token: accessToken,
-        expiration: expiration,
-        refreshToken: refreshToken,
-        refreshExpiration: refreshExpiration
-      }
-    }
+    };
   }
 
   async refreshToken(data: { refreshToken, lang?}): Promise<DataResultDto<AccessTokenDto | null>> {
@@ -157,58 +159,21 @@ export class UserService {
   }
 
 
-  async register(userDto: UserLoginRegisterDto) {
-    const existingUser = await this.userModel.findOne({
-      email: userDto.email,
-    });
-
-    if (existingUser) {
-      if (existingUser.verified) {
-        throw new ConflictException('auth.register.user-already-exists');
-      } else {
-        const verificationCode = generateRandom(false, true, 4);
-        await this.userModel.updateOne(existingUser, {
-          verificationCode: verificationCode,
-        });
-
-        this.notificationClient.emit('notification.send-otp', {
-          channel: OtpChannel.EMAIL,
-          recipient: userDto.email,
-          code: verificationCode,
-        });
-
-        return {
-          success: true,
-          statusCode: HttpStatus.OK,
-          message: 'user.code.sent',
-        }
-      }
-    }
-
-    const verificationCode = generateRandom(false, true, 4);
-    console.log(verificationCode);
-
-
-    await this.userModel.create({
-      email: userDto.email,
-      passwordHash: userDto.password,
-      verificationCode: verificationCode,
-      verified: false,
-      claims: ['user'],
-      lang: 'fa',
-    });
-
-    return {
-      success: true,
-      statusCode: HttpStatus.OK,
-      message: 'user.code.sent',
-    }
-  }
-
   async verifyCode(userDto: UserLoginRegisterDto): Promise<DataResultDto<AccessTokenDto>> {
 
+    const phoneNumber = formatToIranianE164(userDto.phoneNumber);
+
+    const lockTtl = await this.getLockTTL(phoneNumber);
+    if (lockTtl > 0) {
+      throw new HttpException({
+        statusCode: HttpStatus.TOO_MANY_REQUESTS,
+        message: 'user.login.too-many-failed-attempts',
+        retryAfterSeconds: lockTtl,
+      }, HttpStatus.TOO_MANY_REQUESTS);
+    }
+
     const user = await this.userModel.findOne({
-      email: userDto.email,
+      phoneNumber: phoneNumber,
     }) as UserDocument;
 
     if (!user) {
@@ -221,15 +186,6 @@ export class UserService {
       );
     }
 
-    if (user.verified)
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.CONFLICT,
-          message: 'user.user.verify.already-verified',
-        },
-        HttpStatus.CONFLICT,
-      );
-
     if (!userDto.verificationCode) {
       throw new HttpException(
         {
@@ -241,15 +197,26 @@ export class UserService {
     }
 
     if (user.verificationCode !== userDto.verificationCode) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.FORBIDDEN,
-          message: 'user.verify.code-invalid',
-        },
-        HttpStatus.FORBIDDEN,
-      );
+      const attemptsKey = `otp_attempts:${phoneNumber}`;
+      const attempts = await this.redis.incr(attemptsKey);
+
+      if (attempts === 1) {
+        await this.redis.expire(attemptsKey, 300);
+      }
+
+      if (attempts >= 5) {
+        await this.redis.set(`otp_lock:${phoneNumber}`, '1', 'EX', 900);
+        await this.redis.del(attemptsKey);
+      }
+
+      throw new HttpException({
+        statusCode: HttpStatus.FORBIDDEN,
+        message: 'user.verify.code-invalid',
+      }, HttpStatus.FORBIDDEN);
     }
 
+    await this.redis.del(`otp_attempts:${phoneNumber}`);
+    await this.redis.del(`otp_cooldown:${phoneNumber}`);
 
     user.verified = true;
     user.verificationCode = undefined;
@@ -290,39 +257,27 @@ export class UserService {
     }
   }
 
-  async resetPassword(resetPass: ResetPasswordDto, context: Context): Promise<ResultDto> {
-    const user = await this.userModel.findById(context.sub)
-
-    if (!user) throw new NotFoundException('user.get.not-found')
-
-    if (resetPass.password !== resetPass.confirmPassword) throw new BadRequestException('user.reset-pass.not-same')
-
-    user.passwordHash = resetPass.password
-    await user.save()
-
-    return {
-      success: true,
-      statusCode: HttpStatus.OK,
-      message: 'user.reset-pass.successfully'
-    }
-  }
-
   async userProfile(context: Context): Promise<DataResultDto<any>> {
     const user = await this.userModel.findById(context.sub);
+
+    if (!user) throw new HttpException({
+      statusCode: HttpStatus.NOT_FOUND,
+      message: 'user.not-found',
+    }, HttpStatus.NOT_FOUND);
 
     return {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'user-profile.fetch.success',
       data: {
-        userId: String(user?._id),
-        username: user?.username,
-        firstName: user?.firstName,
-        lastName: user?.lastName,
-        phoneNumber: user?.phoneNumber,
-        email: user?.email,
-        photoUrl: user?.photoUrl,
-        roles: user?.claims
+        userId: String(user._id),
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phoneNumber: user.phoneNumber,
+        email: user.email,
+        photoUrl: user.photoUrl,
+        roles: user.claims
       }
     }
   }
