@@ -8,6 +8,7 @@ import DataResultDto from '@app/contracts/models/dtos/dataResultDto';
 import { RpcException } from '@nestjs/microservices';
 import { NormalizeObjectId } from '@app/contracts/utils/mongoose/normalizeObjectId';
 import ResultDto from '@app/contracts/models/dtos/resultDto';
+import { formatToIranianE164 } from '@app/contracts/utils/number/phone-number';
 
 @Injectable()
 export class ContactsService {
@@ -27,11 +28,17 @@ export class ContactsService {
         const userId = context.sub;
         const cleanQuery = query.trim();
 
+        let formattedPhone: string| null = cleanQuery;
+        try {
+            formattedPhone = formatToIranianE164(cleanQuery);
+        } catch {
+           formattedPhone = null;
+        }
+
         const targetUser = await this.userModel.findOne({
             $or: [
-                { phoneNumber: cleanQuery },
-                { username: cleanQuery },
-                { email: cleanQuery }
+                { phoneNumber: formattedPhone },
+                { username: cleanQuery }
             ]
         })
             .select('_id firstName lastName')
@@ -101,7 +108,6 @@ export class ContactsService {
                             $project: {
                                 username: 1,
                                 phoneNumber: 1,
-                                email: 1,
                                 firstName: 1,
                                 lastName: 1,
                                 avatar: 1,
@@ -126,7 +132,6 @@ export class ContactsService {
                         { customLastName: searchRegex },
                         { 'contactUser.username': searchRegex },
                         { 'contactUser.phoneNumber': searchRegex },
-                        { 'contactUser.email': searchRegex },
                         { 'contactUser.firstName': searchRegex },
                         { 'contactUser.lastName': searchRegex },
                     ],
