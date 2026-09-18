@@ -367,7 +367,7 @@ export class UserService {
       .find({
         _id: { $in: uniqueIds },
       })
-      .select('_id firstName lastName username avatar isOnline lastSeen')
+      .select('_id firstName lastName username phoneNumber photoUrl')
       .lean()
       .exec();
 
