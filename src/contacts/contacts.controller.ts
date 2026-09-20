@@ -60,4 +60,16 @@ export class ContactsController {
             payload.contactUserId
         );
     }
+
+    @MessagePattern('contact.room')
+    async handleGetOrCreateRoom(
+        @Payload() payload: { contactUserId: string },
+        @RPCContext() context
+    ) {
+
+        return this.contactService.getOrCreateRoom(
+            context,
+            payload.contactUserId
+        );
+    }
 }

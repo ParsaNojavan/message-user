@@ -1,14 +1,16 @@
-import { BadRequestException, ConflictException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpStatus, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import User, { UserDocument } from 'src/models/concrete/user';
 import { Model, PipelineStage, Types } from 'mongoose';
 import Contact, { ContactDocument } from 'src/models/concrete/contacts';
 import Context from '@app/contracts/models/dtos/rpcContext';
 import DataResultDto from '@app/contracts/models/dtos/dataResultDto';
-import { RpcException } from '@nestjs/microservices';
+import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { NormalizeObjectId } from '@app/contracts/utils/mongoose/normalizeObjectId';
 import ResultDto from '@app/contracts/models/dtos/resultDto';
 import { formatToIranianE164 } from '@app/contracts/utils/number/phone-number';
+import { date } from 'joi';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class ContactsService {
@@ -16,6 +18,7 @@ export class ContactsService {
     constructor(
         @InjectModel(User.name) private userModel: Model<UserDocument>,
         @InjectModel(Contact.name) private contactModel: Model<ContactDocument>,
+        @Inject('chat-client') private chatClient: ClientProxy
     ) { }
 
     async addContact(
@@ -28,11 +31,11 @@ export class ContactsService {
         const userId = context.sub;
         const cleanQuery = query.trim();
 
-        let formattedPhone: string| null = cleanQuery;
+        let formattedPhone: string | null = cleanQuery;
         try {
             formattedPhone = formatToIranianE164(cleanQuery);
         } catch {
-           formattedPhone = null;
+            formattedPhone = null;
         }
 
         const targetUser = await this.userModel.findOne({
@@ -208,6 +211,49 @@ export class ContactsService {
             statusCode: HttpStatus.OK,
             message: 'contact.deleted.success',
         };
+    }
+
+    async getOrCreateRoom(context: Context, contactUserId: string) {
+
+        const contact = await this.contactModel.findOne(
+            {
+                userId: NormalizeObjectId.getObjectIdOrString(context.sub),
+                contactUserId: NormalizeObjectId.getObjectIdOrString(contactUserId)
+            }
+        );
+
+        if (!contact)
+            throw new NotFoundException('contact not found');
+
+        if (contact.roomId) {
+            return {
+                success: true,
+                statusCode: HttpStatus.OK,
+                message: 'room.retrieved.success',
+                data: {
+                    roomId: contact.roomId
+                }
+            };
+        }
+        else {
+            const response = await firstValueFrom(
+                this.chatClient.send('direct.create', { userId: contact.contactUserId, context: context })
+            );
+
+            const newRoomId = response.room._id;
+
+            contact.roomId = newRoomId;
+            await contact.save();
+
+            return {
+                success: true,
+                statusCode: HttpStatus.CREATED,
+                message: 'room.created.success',
+                data: {
+                    roomId: newRoomId
+                }
+            };
+        }
     }
 
 }
