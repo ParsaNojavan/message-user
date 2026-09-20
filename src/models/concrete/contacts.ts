@@ -10,6 +10,9 @@ export default class Contact extends Document implements IEntity {
     @Prop({ type: Types.ObjectId, required: true, ref: 'User' })
     contactUserId: Types.ObjectId;
 
+    @Prop({ type: Types.ObjectId })
+    roomId?: Types.ObjectId;
+
     @Prop({ required: false })
     customFirstName?: string;
 
