@@ -15,6 +15,8 @@ export default class User extends Document implements IEntity {
     phoneNumber: string
     @Prop({ unique: true })
     email: string
+    @Prop()
+    bio: string
     @Prop({ default: 'fa' })
     lang: string
     @Prop()
