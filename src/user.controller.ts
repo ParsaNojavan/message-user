@@ -32,6 +32,7 @@ export class UserController {
 
   @MessagePattern('user.update')
   async updateProfile(@Payload() data: { userDto: UpdateUserDto }, @RPCContext() context) {
+    console.log(data)
     return await this.userService.updateProfile(data.userDto, context)
   }
 

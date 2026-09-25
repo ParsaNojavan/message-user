@@ -275,6 +275,7 @@ export class UserService {
         firstName: user.firstName,
         lastName: user.lastName,
         phoneNumber: user.phoneNumber,
+        bio: user.bio,
         email: user.email,
         photoUrl: user.photoUrl,
         roles: user.claims
@@ -367,7 +368,7 @@ export class UserService {
       .find({
         _id: { $in: uniqueIds },
       })
-      .select('_id firstName lastName username phoneNumber photoUrl')
+      .select('_id firstName lastName username phoneNumber photoUrl bio')
       .lean()
       .exec();
 
