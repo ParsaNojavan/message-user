@@ -80,16 +80,27 @@ export class ContactsService {
         }
     }
 
-    async listContacts(search, cursor, limit, context: Context)
+    async listContacts(search, cursor, limit, context: Context, userIds)
         : Promise<DataResultDto<any>> {
 
-        limit = Math.min(limit, 50);
+        if (userIds && userIds.length > 0) {
+            limit = userIds.length;
+        } else {
+            limit = Math.min(limit, 50);
+        }
+
         const userId = context.sub;
         const currentUserId = new Types.ObjectId(userId);
 
         const pipeline: PipelineStage[] = [];
 
         const initialMatch: Record<string, any> = { userId: currentUserId };
+
+        if (userIds && userIds.length > 0) {
+            initialMatch.contactUserId = {
+                $in: userIds.map(id => new Types.ObjectId(id))
+            };
+        }
 
         if (cursor) {
             initialMatch._id = { $lt: new Types.ObjectId(cursor) };
