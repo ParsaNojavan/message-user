@@ -30,11 +30,12 @@ export class ContactsController {
             search?: string;
             cursor?: string;
             limit?: number;
+            userIds?: string[];
         },
         @RPCContext() context
     ) {
-        const { search, cursor, limit = 20 } = data;
-        return this.contactService.listContacts(search, cursor, limit, context);
+        const { search, cursor, limit = 20, userIds } = data;
+        return this.contactService.listContacts(search, cursor, limit, context, userIds);
     }
 
     @MessagePattern('contacts.edit')
